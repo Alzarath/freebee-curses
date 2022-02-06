@@ -354,8 +354,8 @@ if __name__ == "__main__":
 		if not args.remote_game:
 			if not args.game:
 				print("random ", end="")
-			print("Local Game with the letters \'%s\'." % given_letters)
+			print("Local Game with the letters \'%s\'." % ''.join(given_letters))
 		else:
-			print("Fetched Game with the letters \'%s\'." % given_letters)
+			print("Fetched Game with the letters \'%s\'." % ''.join(given_letters))
 		if len(globals.correct_guesses) > 0:
 			print("Correct Guesses: %s" % ', '.join(sorted(globals.correct_guesses)))
