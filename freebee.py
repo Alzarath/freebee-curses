@@ -44,17 +44,18 @@ def get_usable_words(letter_list, dictionary):
 def is_valid_date(date_string):
 	return len(date_string) == 8 and int(date_string) != None
 
-def fetch_game(date_string):
+def fetch_game(remote_string):
 	url = "https://freebee.fun"
 	uses_date = False
+	game_string = remote_string or "today"
 	# Verify that the supplied date is a valid one
-	if date_string == "today" or date_string == "yesterday":
-		url += "/play/" + date_string
-	elif date_string == "random":
+	if game_string == "today" or game_string == "yesterday":
+		url += "/play/" + game_string
+	elif game_string == "random":
 		url += "/cgi-bin/random"
-	elif is_valid_date(date_string):
+	elif is_valid_date(game_string):
 		uses_date = True
-		url += "/daily/game-" + str(date_string)
+		url += "/daily/game-" + str(game_string)
 	else:
 		print("Invalid game argument.")
 		parser.print_help()
