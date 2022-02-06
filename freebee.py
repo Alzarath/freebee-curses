@@ -17,11 +17,13 @@ parser.add_argument('--print-solutions', action='store_true',
 					help='Print all solutions to the specific game and exit')
 parser.add_argument('--download-dictionary', action='store_true',
 					help='Downloads the dictionary for offline play (Recommended)')
-parser.add_argument('-o', '--output', type=str, nargs=1,
+parser.add_argument('-o', '--output', type=str,
 					help='Saves the game to the designated file')
 parser.add_argument('--remote-game', action='store_true',
 					help='Play a game from freebee.fun. Accepts: today, yesterday, random, or a date formatted as YYYYMMDD')
-parser.add_argument('--seed', type=int, nargs=1,
+parser.add_argument('--bad-game', action='store_true',
+					help='Ignore the need for a game to be \'good\' and play the first result (only applies to random local games)')
+parser.add_argument('--seed', type=int,
                     help='Seed used to generate local characters from')
 
 class globals:
@@ -40,6 +42,21 @@ def get_usable_words(letter_list, dictionary):
 				usable_words.append(word)
 
 	return usable_words
+
+# According to freebee.fun, a good game is one that contains at least 1 pangram and between 20 and 2000 usable words
+def is_good_game(usable_words, letter_list):
+	if len(usable_words) < 20 or len(usable_words) > 2000:
+		return False
+
+	for word in usable_words:
+		is_pangram = True
+		for letter in letter_list:
+			if letter not in word:
+				is_pangram = False
+				break
+
+		if is_pangram:
+			return True
 
 def is_valid_date(date_string):
 	return len(date_string) == 8 and int(date_string) != None
@@ -98,11 +115,9 @@ def read_dictionary(file_path):
 
 	return dictionary
 
-def generate_letters(seed = None, num_of_letters : int = 7):
+def generate_letters(num_of_letters : int = 7):
 	remaining_letters = list(valid_letters)
 	given_letters = []
-	if type(seed) == int:
-		random.seed(seed)
 
 	while len(given_letters) < num_of_letters:
 		letter_index = random.randint(0, len(remaining_letters)-1)
@@ -110,7 +125,6 @@ def generate_letters(seed = None, num_of_letters : int = 7):
 		given_letters.append(given_letter)
 
 	return given_letters
-
 
 def get_letters_from_game(game_json):
 	main_letter = [game_json["center"]] # The important character that all words required
@@ -238,46 +252,29 @@ if __name__ == "__main__":
 	game_file_name = None
 	date_string = None
 	game_data = None
+	random_local = False
 
-	# If we're playing a remote game, specify a desired date string for file name
-	if not args.remote_game:
-		# If positional arguments are empty, randomly generate letters
-		if not args.game:
-			if args.seed:
-				given_letters = generate_letters(args.seed)
-				important_letter = given_letters[0]
+	# If we're playing a remote game, fetch the game data
+	if args.remote_game:
+		game_data = fetch_game(args.game)
+	# If we're not playing a remote game, generate some aspects
+	else:
+		# If positional arguments are supplied, proceed to try creating a game
+		if args.game:
+			# If there is a file with the name of the positional argument, try to load its data
+			if os.path.isfile(args.game):
+				game_data = read_game(args.game)
+			# If there is a positional argument with 7 letters, use it to generate the desired letters
+			elif args.game.isalpha() and len(args.game) == 7:
+				# Create game_data as a string of the json given by the provided
+				game_data = "{\n\t\"letters\": \"%s\",\n\t\"center\": \"%s\"\n}" % (args.game.lower()[1:7], args.game[0])
+			# Otherwise assume they were looking for a file and it does not exist.
 			else:
-				given_letters = generate_letters()
-				important_letter = given_letters[0]
-		# If there is a file with the name of the positional argument, try to load its data
-		elif os.path.isfile(args.game):
-			game_data = read_game(args.game)
-		# If there is a positional argument with 7 letters, use it to generate the desired letters
-		elif args.game.isalpha() and len(args.game) == 7:
-			given_letters = list(args.game.lower())[:7]
-			important_letter = given_letters[0]
-		# Otherwise assume they were looking for a file and it does not exist.
-		else:
-			print(args.game)
-			print("Error: File not found.")
-			sys.exit(1)
-
+				print(args.game)
+				print("Error: File not found.")
+				sys.exit(1)
+				
 	cwd = os.getcwd()
-
-	# If we aren't overwriting the file and a designated game file exists, load it
-	if not game_data:
-		if args.remote_game:
-			# Download the game data
-			game_data = fetch_game(args.game)
-		else:
-			# Generate game data
-			game_data = "{\n\t\"letters\": \"%s\",\n\t\"center\": \"%s\"\n}" % (''.join(given_letters[1:]), important_letter)
-
-		if args.output:
-			# Save the game data to a file as requested
-			game_file = open(os.path.join(cwd, args.output[0]), 'w')
-			game_file.writelines(game_data)
-			game_file.close()
 
 	dictionary_data = None
 	# Load dictionary from file "dictionary.txt" if it exists
@@ -285,24 +282,60 @@ if __name__ == "__main__":
 		dictionary_data = read_dictionary(os.path.join(cwd, "dictionary.txt"))
 	# Download dictionary.txt and save it
 	else:
-		print("Downloading dictionary from freebee-game/enable...")
+		if not args.print_solutions:
+			print("Downloading dictionary from freebee-game/enable...")
 		dictionary_data = fetch_dictionary("https://raw.githubusercontent.com/freebee-game/enable/master/enable1.txt")
 		
 		dictionary_file = open(os.path.join(cwd, "dictionary.txt"), 'w')
 		dictionary_file.writelines(dictionary_data)
 		dictionary_file.close()
 
-	# Gather game information
-	game_json = json.loads(game_data) # Game json
-	given_letters = given_letters or get_letters_from_game(game_json) # Grab letters for fetched game
-	important_letter = given_letters[0] # Grab the first letter, assuming it's the "important" letter
 	dictionary_json = dictionary_data.split('\n') # Fetch the dictionary of valid words
-	usable_words = get_usable_words(given_letters, dictionary_json) # Calculate the words from the dictionary that contain the desired letters
+
+	usable_words = []
+	# Generate a random game
+	if not args.game:
+		iterations = 1
+		if args.seed:
+			random.seed(args.seed)
+		given_letters = generate_letters()
+		important_letter = given_letters[0]
+
+		# If we're not forcing the first result, continue generating games until we get a "good" one
+		if not args.bad_game:
+			while not is_good_game(usable_words, given_letters):
+				iterations += 1
+				if iterations > 1000:
+					print("Took too long to generate a game. Stopping for sanity's sake. Try again.")
+					sys.exit(1)
+				given_letters = generate_letters()
+				important_letter = given_letters[0]
+				usable_words = get_usable_words(given_letters, dictionary_json) # Calculate the words from the dictionary that contain the desired letters
+
+		game_data = "{\n\t\"letters\": \"%s\",\n\t\"center\": \"%s\"\n}" % (''.join(given_letters[1:]), important_letter)
+		game_json = json.loads(game_data)
+	else:
+		game_json = json.loads(game_data) # Game json
+		given_letters = given_letters or get_letters_from_game(game_json) # Grab letters for fetched game
+		important_letter = given_letters[0] # Grab the first letter, assuming it's the "important" letter
+		usable_words = get_usable_words(given_letters, dictionary_json) # Calculate the words from the dictionary that contain the desired letters
+
+	# Save the game data to a file as requested
+	if args.output:
+		game_file = open(os.path.join(cwd, args.output), 'w')
+		game_file.writelines(game_data)
+		game_file.close()
 
 	# Print the solutions to the terminal and exit if that's all we want
 	if args.print_solutions:
-		print("Valid responses: %s\nTotal words: %s" % (', '.join(usable_words), len(usable_words)))
-		sys.exit(0)
+		if len(usable_words) == 0:
+			print("No valid words for '%s'." % (''.join(given_letters)))
+			sys.exit(1)
+		else:
+			print("Valid words for '%s':" % (''.join(given_letters)))
+			for i in usable_words:
+				print(i)
+			sys.exit(0)
 
 	# Interactive ncurses stuff
 	stdscr = curses.initscr()
