@@ -235,7 +235,7 @@ def play(stdscr):
 
 		stdscr.move(13, 0)
 		stdscr.clrtoeol()
-		stdscr.addstr(13, 0, "Correct words:")
+		stdscr.addstr(13, 0, "Correct guesses:")
 		for i in range(0, len(globals.correct_guesses)):
 			stdscr.move(14 + i, 0)
 			stdscr.clrtoeol()
@@ -270,7 +270,6 @@ if __name__ == "__main__":
 				game_data = "{\n\t\"letters\": \"%s\",\n\t\"center\": \"%s\"\n}" % (args.game.lower()[1:7], args.game[0])
 			# Otherwise assume they were looking for a file and it does not exist.
 			else:
-				print(args.game)
 				print("Error: File not found.")
 				sys.exit(1)
 				
@@ -352,9 +351,11 @@ if __name__ == "__main__":
 		curses.wrapper(play)
 	except KeyboardInterrupt:
 		print("Game Over. Played a ", end="")
-		if local_game:
-			print("Local Game.")
+		if not args.remote_game:
+			if not args.game:
+				print("random ", end="")
+			print("Local Game with the letters \'%s\'." % given_letters)
 		else:
-			print("Fetched Game.")
+			print("Fetched Game with the letters \'%s\'." % given_letters)
 		if len(globals.correct_guesses) > 0:
 			print("Correct Guesses: %s" % ', '.join(sorted(globals.correct_guesses)))
